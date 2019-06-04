@@ -1,0 +1,132 @@
+import numpy as np
+import matplotlib.pyplot as plt
+plt.style.use('kostas')
+plt.close('all')
+
+def fd(x,y):
+
+    h = x[1]-x[0]
+    yp=np.zeros_like(x)
+    yp[1:-1] = (-y[:-2] + y[2:])/(2*h)
+    return yp
+
+def cubic_int(x,y,yp_exact=None,method='FD'):
+    
+    xmin = x[0]
+    xmax = x[len(x)-1]
+    h = x[1]-x[0]
+
+    if method=='FD':
+        yp=np.zeros_like(x)
+        yp[1:-1] = (-y[:-2] + y[2:])/(2)
+    elif method=='Exact':
+        yp = yp_exact*h
+
+    x_int = np.linspace(xmin,xmax,2000)
+    y_int = np.empty_like(x_int)
+    yp_int = np.empty_like(x_int)
+    for i,x in enumerate(x_int):
+        if x <= xmin+h or x >= xmax - h:
+            y_int[i] = 0
+            yp_int[i] = 0
+        else:
+            ix0 = int((x-xmin)/h)
+            ix1 = ix0+1
+            xt = (x - xmin)/h - ix0
+            a0 = y[ix0]
+            a1 = yp[ix0]
+            a2 = 3*(y[ix1]-y[ix0]) - (yp[ix1]+2*yp[ix0])
+            a3 = (yp[ix1] + yp[ix0]) -2*( y[ix1] - y[ix0] )
+            y_int[i] = a0 + a1*xt + a2*xt**2 + a3*xt**3
+            yp_int[i] =  (a1 + 2*a2*xt + 3*a3*xt**2)/h
+    
+    return x_int, y_int, -yp_int
+
+def poisson_sol(N,xmin=-20,xmax=20):
+
+    x_sol = np.linspace(xmin,xmax,N)
+    h = x_sol[1]-x_sol[0]
+    B = - h**2 * charge_true(x_sol)
+    B[0] -= phi_true(xmin-h)
+    B[N-1] -= phi_true(xmax+h)
+    A = np.eye(N,k=1) -2*np.eye(N) + np.eye(N,k=-1)
+    Am1 = np.linalg.inv(A)
+    phi_sol = np.dot(Am1, B)
+    e_sol=np.zeros_like(phi_sol)
+    e_sol[1:-1] = (phi_sol[:-2] - phi_sol[2:])/(2*h)
+    return x_sol, phi_sol, e_sol
+
+def charge_true(x):
+    return -np.exp(x)/(1.+np.exp(x))**2
+
+def efield_true(x):
+    return 1./(1+np.exp(x)) - 0.5
+
+def phi_true(x):
+    return -x/2. + np.log(1+np.exp(x))
+
+x_true = np.linspace(-20,20,1000)
+ch_true = charge_true(x_true)
+e_true = efield_true(x_true)
+p_true = phi_true(x_true)
+
+x_coarse = np.linspace(-20,20,20)
+ch_coarse = charge_true(x_coarse)
+e_coarse = efield_true(x_coarse)
+p_coarse = phi_true(x_coarse)
+e_fd = -fd(x_coarse, p_coarse)
+
+
+fig1 = plt.figure(1,figsize=(15,15))
+ax1 = fig1.add_subplot(3,1,1)
+fig2 = plt.figure(2,figsize=(15,15))
+ax2 = fig2.add_subplot(1,1,1)
+ax3 = fig1.add_subplot(3,1,3)
+ax1.plot(x_true, ch_true)
+ax2.plot(x_true, e_true,'b',label='Exact Field')
+ax3.plot(x_true, p_true)
+
+x_sol, phi_sol, e_sol = poisson_sol(20)
+x_sol_fine, phi_sol_fine, e_sol_fine = poisson_sol(40)
+ax2.plot(x_sol, e_sol, 'co')
+ax2.plot(x_sol_fine, e_sol_fine, 'mo')
+x_int_sol, phi_int_sol, e_int_sol = cubic_int(x_sol, phi_sol)
+x_int_sol_fine, phi_int_sol_fine, e_int_sol_fine = cubic_int(x_sol_fine, phi_sol_fine)
+ax2.plot(x_int_sol_fine, e_int_sol_fine, 'm')
+#ax3.plot(x_sol, phi_sol, 'ro')
+
+x_int, phi_int, e_int = cubic_int(x_coarse, p_coarse)
+ax2.plot(x_int, e_int, 'r',label='Interp with FD')
+ax3.plot(x_int, phi_int, 'r')
+
+ax2.plot(x_coarse, e_fd, 'ro')
+ax3.plot(x_coarse, p_coarse, 'ro')
+
+x_int_true, phi_int_true, e_int_true = cubic_int(x_coarse, p_coarse, -e_coarse,'Exact')
+ax2.plot(x_int_true, e_int_true, 'g',label='Interp. with Exact Derivs.')
+ax2.plot(x_coarse, e_coarse, 'go')
+ax3.plot(x_int_true, phi_int_true, 'g')
+
+
+ax2.set_xlim(-15,15)
+ax2.set_ylabel('E')
+ax2.set_xlabel('x')
+ax2.legend()
+
+fig4 = plt.figure(4,figsize=(15,15))
+ax4 = fig4.add_subplot(1,1,1)
+ax4.plot(x_true,e_true-e_true,'b',label='Exact Field')
+#ax4.plot(x_int,e_int-efield_true(x_int),'r',label='Interp. with FD')
+#ax4.plot(x_coarse,e_fd-efield_true(x_coarse),'ro')
+#ax4.plot(x_int_true, e_int_true-efield_true(x_int_true), 'g',label='Interp. with Exact Derivs.')
+#ax4.plot(x_coarse, e_coarse-efield_true(x_coarse), 'go')
+ax4.plot(x_int_sol,e_int_sol-efield_true(x_int_sol),'c',label='Poisson Sol.')
+ax4.plot(x_sol,e_sol-efield_true(x_sol),'co')
+ax4.plot(x_int_sol_fine,e_int_sol_fine-efield_true(x_int_sol_fine),'m',label='Poisson Sol. fine')
+ax4.plot(x_sol_fine,e_sol_fine-efield_true(x_sol_fine),'mo')
+ax4.set_ylim(-6e-2,6e-2)
+ax4.set_xlim(-15,15)
+ax4.set_ylabel('E - E$_{exact}$')
+ax4.set_xlabel('x')
+ax4.legend()
+plt.show(False)
