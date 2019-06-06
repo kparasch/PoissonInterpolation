@@ -103,38 +103,50 @@ def poisson_sol(N,xmin=-20,xmax=20,yoff=0):
     ey_sol=-ey_sol
     return X_sol, Y_sol, phi_sol, ex_sol, ey_sol
 
-def refine_grid(x,y,phi,rho):
-    Nx, Ny = phi.shape
-    h = x[1,0]-x[0,0]
-    new_h = h/2.
-    new_x = np.empty([2*Nx-1,2*Ny-1])
-    new_y = np.empty_like(new_x)
-    new_phi = np.empty_like(new_x)
-    new_rho = np.empty_like(new_x)
-    new_x[::2,::2] = x
-    new_y[::2,::2] = y
-    new_phi[::2,::2] = phi
-    new_rho[::2,::2] = rho
-    new_phi[1::2,1::2] = (  new_phi[2::2,2::2]
-                          + new_phi[:-1:2,:-1:2]
-                          + new_phi[2::2,:-1:2]
-                          + new_phi[:-1:2,2::2])/4.   + 0#put rho
-    new_phi[1::2,2:-1:2] = (  new_phi[1::2,3::2]
-                          + new_phi[1::2,1:-2:2]
-                          + new_phi[2::2,2:-1:2]
-                          + new_phi[0:-1:2,2:-1:2])/4.  + 0
-    new_phi[2:-1:2,1::2] = (  new_phi[3::2,1::2]
-                          + new_phi[1:-2:2,1::2]
-                          + new_phi[2:-1:2,2::2]
-                          + new_phi[2:-1:2,0:-1:2])/4.    + 0
-    new_x[::2,1::2] = (new_x[::2,2::2] + new_x[::2,:-1:2])/2.
-    new_x[1::2,:] = (new_x[:-1:2,:] + new_x[2::2,:])/2.
-    new_y[::2,1::2] = (new_y[::2,2::2] + new_y[::2,:-1:2])/2.
-    new_y[1::2,:] = (new_y[:-1:2,:] + new_y[2::2,:])/2.
-    new_x = new_x[1:-1,1:-1]
-    new_y = new_y[1:-1,1:-1]
-    new_phi = new_phi[1:-1,1:-1]
-    return new_x, new_y, new_phi
+def refine_grid(x,y,phi,rho, k=1):
+    if k == 0:
+        return x,y,phi,rho
+    else:
+        Nx, Ny = phi.shape
+        h = x[1,0]-x[0,0]
+        new_h = h/2.
+        new_x = np.empty([2*Nx-1,2*Ny-1])
+        new_y = np.empty_like(new_x)
+        new_phi = np.empty_like(new_x)
+        new_rho = np.empty_like(new_x)
+
+        new_x[::2,::2] = x
+        new_x[::2,1::2] = (new_x[::2,2::2] + new_x[::2,:-1:2])/2.
+        new_x[1::2,:] = (new_x[:-1:2,:] + new_x[2::2,:])/2.
+
+        new_y[::2,::2] = y
+        new_y[::2,1::2] = (new_y[::2,2::2] + new_y[::2,:-1:2])/2.
+        new_y[1::2,:] = (new_y[:-1:2,:] + new_y[2::2,:])/2.
+
+        new_rho[::2,::2] = rho
+        new_rho[::2,1::2] = (new_rho[::2,2::2] + new_rho[::2,:-1:2])/2.
+        new_rho[1::2,:] = (new_rho[:-1:2,:] + new_rho[2::2,:])/2.
+        #new_rho = charge_true(new_x, new_y)
+        new_phi[::2,::2] = phi
+        new_phi[1::2,1::2] = (  new_phi[2::2,2::2]
+                              + new_phi[:-1:2,:-1:2]
+                              + new_phi[2::2,:-1:2]
+                              + new_phi[:-1:2,2::2])/4. + h**2/8.*new_rho[1::2,1::2]
+        new_phi[1::2,2:-1:2] = (  new_phi[1::2,3::2]
+                              + new_phi[1::2,1:-2:2]
+                              + new_phi[2::2,2:-1:2]
+                              + new_phi[0:-1:2,2:-1:2])/4.  + h**2/16.*new_rho[1::2,2:-1:2]
+        new_phi[2:-1:2,1::2] = (  new_phi[3::2,1::2]
+                              + new_phi[1:-2:2,1::2]
+                              + new_phi[2:-1:2,2::2]
+                              + new_phi[2:-1:2,0:-1:2])/4.    + h**2/16.*new_rho[2:-1:2,1::2]
+
+        new_x = new_x[1:-1,1:-1]
+        new_y = new_y[1:-1,1:-1]
+        new_phi = new_phi[1:-1,1:-1]
+        new_rho = new_rho[1:-1,1:-1]
+        return refine_grid(new_x, new_y, new_phi, new_rho, k-1)
+        #return new_x, new_y, new_phi, new_rho
 
 #def cubic_int(x,y,yp_exact=None,method='FD'):
 #    
@@ -188,7 +200,7 @@ x_sol, y_sol, phi_sol, ex_sol, ey_sol = poisson_sol(N1,yoff=yoff)
 h = x_sol[1,0]-x_sol[0,0]
 
 rho_sol = charge_true(x_sol,y_sol)
-x_ref, y_ref, phi_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol)
+x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=3)
 ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref)
 ex_ref = -ex_ref
 ey_ref = -ey_ref
@@ -231,7 +243,8 @@ cf31 = ax31.pcolormesh(X_true[1:,1:]-h_true/2., Y_true[1:,1:]-h_true/2., ex_true
 cbar31 = plt.colorbar(cf31)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar31.set_label('$E_x$')
 ax32 = fig3.add_subplot(3,1,2)
-cf32 = ax32.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., ex_sol[1:,1:]-efieldx_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+#cf32 = ax32.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., ex_sol[1:,1:]-efieldx_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+cf32 = ax32.pcolormesh(x_ref[1:,1:]-h_ref/2., y_ref[1:,1:]-h_ref/2., ex_ref[1:,1:]-efieldx_true(x_ref[1:,1:],y_ref[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
 #cf2.set_clim(0,-0.5)
 cbar32 = plt.colorbar(cf32)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar32.set_label('$E_x$')
