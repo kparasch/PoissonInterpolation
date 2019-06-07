@@ -8,7 +8,7 @@ def charge_r(r):
     if r > 0:
         return (1-er)/(1+er)/(2.*r) - er/(1.+er)**2
     else:
-        return 0.5
+        return -0.5
 
 def charge_true(x,y):
     shape = x.shape
@@ -20,7 +20,7 @@ def charge_true(x,y):
             if r > 0:
                 ret[ii,jj] = (1-er)/(1+er)/(2.*r) - er/(1.+er)**2
             else:
-                ret[ii,jj] = 0.5
+                ret[ii,jj] = -0.5
     return ret
 
 def efieldx_true(x,y):
@@ -50,14 +50,25 @@ def phi_true(x,y):
     er = np.exp(r)
     return -r/2. + np.log(1+np.exp(r))
 
-def fd(x,y,phi):
+def fd(x,y,phi,k=0):
 
     dx = x[1,0]-x[0,0]
     dy = y[0,1]-y[0,0]
     dfdx=np.zeros_like(phi)
     dfdy=np.zeros_like(phi)
-    dfdx[1:-1,:] = (-phi[:-2,:] + phi[2:,:])/(2*dx)
-    dfdy[:,1:-1] = (-phi[:,:-2] + phi[:,2:])/(2*dy)
+    nx,ny = phi.shape
+    n = int(2**(k+1))
+    n2 = int(2**(k))
+    #for i in range(n2):
+    #    print(dfdx[n2+i:-n2+i:n2,:].shape)
+    #    print(phi[i:-n+i:n2,:].shape)
+    #    print(phi[n+i::n2,:].shape)
+    #    dfdx[n2+i:-n2+i:n2,:] = (-phi[i:-n+i:n2,:] + phi[n+i::n2,:])/(n*dx)
+    #    dfdy[:,n2+i:-n2+i:n2] = (-phi[:,i:-n+i:n2] + phi[:,n+i::n2])/(n*dy)
+    dfdx[n2:-n2,:] = (-phi[:-n,:] + phi[n:,:])/(n*dx)
+    dfdy[:,n2:-n2] = (-phi[:,:-n] + phi[:,n:])/(n*dy)
+    #dfdx[1:-1,:] = (-phi[:-2,:] + phi[2:,:])/(2*dx)
+    #dfdy[:,1:-1] = (-phi[:,:-2] + phi[:,2:])/(2*dy)
     return dfdx, dfdy
 
 def poisson_sol(N,xmin=-20,xmax=20,yoff=0):
@@ -128,18 +139,19 @@ def refine_grid(x,y,phi,rho, k=1):
         new_rho[1::2,:] = (new_rho[:-1:2,:] + new_rho[2::2,:])/2.
         #new_rho = charge_true(new_x, new_y)
         new_phi[::2,::2] = phi
+        d=1.
         new_phi[1::2,1::2] = (  new_phi[2::2,2::2]
                               + new_phi[:-1:2,:-1:2]
                               + new_phi[2::2,:-1:2]
-                              + new_phi[:-1:2,2::2])/4. + h**2/8.*new_rho[1::2,1::2]
+                              + new_phi[:-1:2,2::2])/4. + d*h**2/8.*new_rho[1::2,1::2]
         new_phi[1::2,2:-1:2] = (  new_phi[1::2,3::2]
                               + new_phi[1::2,1:-2:2]
                               + new_phi[2::2,2:-1:2]
-                              + new_phi[0:-1:2,2:-1:2])/4.  + h**2/16.*new_rho[1::2,2:-1:2]
+                              + new_phi[0:-1:2,2:-1:2])/4.  + d*h**2/16.*new_rho[1::2,2:-1:2]
         new_phi[2:-1:2,1::2] = (  new_phi[3::2,1::2]
                               + new_phi[1:-2:2,1::2]
                               + new_phi[2:-1:2,2::2]
-                              + new_phi[2:-1:2,0:-1:2])/4.    + h**2/16.*new_rho[2:-1:2,1::2]
+                              + new_phi[2:-1:2,0:-1:2])/4.    + d*h**2/16.*new_rho[2:-1:2,1::2]
 
         new_x = new_x[1:-1,1:-1]
         new_y = new_y[1:-1,1:-1]
@@ -181,11 +193,12 @@ def refine_grid(x,y,phi,rho, k=1):
 #    return x_int, y_int, -yp_int
 
 yoff=0
-x_true = np.linspace(-20,20,1000)
-y_true = np.linspace(-20+yoff,20+yoff,1000)
+Ntrue=1001
+x_true = np.linspace(-20,20,Ntrue)
+y_true = np.linspace(-20+yoff,20+yoff,Ntrue)
 h_true=x_true[1]-x_true[0]
 X_true, Y_true = np.meshgrid(x_true,y_true, indexing='ij')
-ch_true = charge_true(X_true, Y_true)
+rho_true = charge_true(X_true, Y_true)
 ex_true = efieldx_true(X_true, Y_true)
 p_true = phi_true(X_true, Y_true)
 
@@ -195,13 +208,13 @@ p_true = phi_true(X_true, Y_true)
 #p_coarse = phi_true(x_coarse)
 #e_fd = -fd(x_coarse, p_coarse)
 
-N1=41
+N1=61
 x_sol, y_sol, phi_sol, ex_sol, ey_sol = poisson_sol(N1,yoff=yoff)
 h = x_sol[1,0]-x_sol[0,0]
 
 rho_sol = charge_true(x_sol,y_sol)
 x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=3)
-ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref)
+ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=3)
 ex_ref = -ex_ref
 ey_ref = -ey_ref
 h_ref = x_ref[1,0] - x_ref[0,0]
@@ -249,12 +262,26 @@ cf32 = ax32.pcolormesh(x_ref[1:,1:]-h_ref/2., y_ref[1:,1:]-h_ref/2., ex_ref[1:,1
 cbar32 = plt.colorbar(cf32)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar32.set_label('$E_x$')
 ax33 = fig3.add_subplot(3,1,3)
-ax33.plot(x_sol[:,N1//2], ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N1//2]),'bo-')
-ax33.plot(x_ref[:,Nr//2], ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2]),'r.')
+ax33.plot(x_sol[:,N1//2], (ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N1//2])),'bo-')
+ax33.plot(x_ref[:,Nr//2], (ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2])),'r.')
 print(y_sol[0,N1//2], y_ref[0,Nr//2])
 ax33.set_xlim(-5,5)
 ax33.set_xlabel('$x$')
 ax33.set_ylabel('$E_x$')
+
+fig4 = plt.figure(4,figsize=(9,15))
+ax40 = fig4.add_subplot(3,1,1)
+ax40.plot(X_true[:,Ntrue//2], rho_true[:,Ntrue//2],'g-')
+ax40.plot(x_sol[:,N1//2], rho_sol[:,N1//2],'b-')
+ax40.plot(x_ref[:,Nr//2], rho_ref[:,Nr//2],'r.')
+ax41 = fig4.add_subplot(3,1,2)
+ax41.plot(X_true[:,Ntrue//2], p_true[:,Ntrue//2],'g-')
+ax41.plot(x_sol[:,N1//2], phi_sol[:,N1//2],'b-')
+ax41.plot(x_ref[:,Nr//2], phi_ref[:,Nr//2],'r.')
+ax42 = fig4.add_subplot(3,1,3)
+ax42.plot(X_true[:,Ntrue//2], ex_true[:,Ntrue//2],'g-')
+ax42.plot(x_sol[:,N1//2], ex_sol[:,N1//2],'b-')
+ax42.plot(x_ref[:,Nr//2], ex_ref[:,Nr//2],'r.')
 #ax3 = fig1.add_subplot(3,1,3)
 #ax1.plot(x_true, ch_true)
 #ax2.plot(x_true, e_true,'b',label='Exact Field')
