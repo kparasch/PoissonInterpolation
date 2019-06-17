@@ -164,8 +164,10 @@ def refine_grid(x,y,phi,rho, k=1):
         return refine_grid(new_x, new_y, new_phi, new_rho, k-1)
         #return new_x, new_y, new_phi, new_rho
 
-def bicubic_int(X, Y, Z):
+def bicubic_int(X, Y, Z, k=0):
     
+    dZdx, dZdy, dZdxdy = fd(X, Y, Z, k, give_mixed=True)
+
     Lx = X.shape[0]
     Ly = X.shape[1]
 
@@ -173,16 +175,72 @@ def bicubic_int(X, Y, Z):
     xmax = X[Lx-1,0]
     ymin = Y[0,0]
     ymax = Y[0,Ly-1]
+    
+    dx = X[1,0] - X[0,0]
+    dy = Y[0,1] - Y[0,0]
 
-    A1 = numpy.array([[1,0,0,0],
-                      [0,0,1,0],
-                      [-3,3,-2,-1],
-                      [2,-2,1,1]])
+    x_int = np.linspace(xmin,xmax,2000)
+    y_int = np.linspace(ymin,ymax,2000)
+    X_int, Y_int = np.meshgrid(x_int,y_int,indexing='ij')
+    
+    Z_int = np.zeros_like(X_int)
+    dZdx_int = np.zeros_like(X_int)
+    dZdy_int = np.zeros_like(X_int)
+    dZdxdy_int = np.zeros_like(X_int)
 
-    A2 = numpy.array([[1,1,0,0],
-                      [0,1,1,1],
-                      [0,1,0,2],
-                      [0,1,0,3]])
+    A1 = np.array([[1,0,0,0],
+                   [0,0,1,0],
+                   [-3,3,-2,-1],
+                   [2,-2,1,1]])
+
+    A2 = A1.transpose()
+
+    F = np.empty_like(A1)
+
+    for i in range(len(x_int)):
+        for j in range(len(y_int)):
+            x = X_int[i,j]
+            y = Y_int[i,j]
+            if not (x <= xmin + dx or x >= xmax - dx or y <= ymin + dy or y >= ymax - dy):
+                ix0 = int((x-xmin)/dx)
+                ix1 = ix0+1
+                iy0 = int((y-ymin)/dy)
+                iy1 = iy0+1
+                
+                F[0,0] = Z[ix0,iy0]
+                F[0,1] = Z[ix0,iy1]
+                F[1,0] = Z[ix1,iy0]
+                F[1,1] = Z[ix1,iy1]
+
+                F[2,0] = dZdx[ix0,iy0]
+                F[2,1] = dZdx[ix0,iy1]
+                F[3,0] = dZdx[ix1,iy0]
+                F[3,1] = dZdx[ix1,iy1]
+
+                F[0,2] = dZdy[ix0,iy0]
+                F[0,3] = dZdy[ix0,iy1]
+                F[1,2] = dZdy[ix1,iy0]
+                F[1,3] = dZdy[ix1,iy1]
+
+                F[2,2] = dZdxdy[ix0,iy0]
+                F[2,3] = dZdxdy[ix0,iy1]
+                F[3,2] = dZdxdy[ix1,iy0]
+                F[3,3] = dZdxdy[ix1,iy1]
+
+                a = np.matmul(A1, np.matmul(F, A2))
+                xt = (x - xmin)/dx - ix0
+                yt = (y - ymin)/dy - iy0
+                xx1 = np.array([1, xt, xt**2, xt**3])
+                yy1 = np.array([1, yt, yt**2, yt**3])
+                xx2 = np.array([0, 1., 2*xt, 3*xt**2])
+                yy2 = np.array([0, 1., 2*yt, 3*yt**2])
+                
+                Z_int[i,j] = np.matmul(xx1,np.matmul(a,yy1))
+                dZdx_int[i,j] = np.matmul(xx2,np.matmul(a,yy1))
+                dZdy_int[i,j] = np.matmul(xx1,np.matmul(a,yy2))
+                dZdxdy_int[i,j] = np.matmul(xx2,np.matmul(a,yy2))
+
+    return X_int, Y_int, Z_int, dZdx_int/dx, dZdy_int/dy, dZdxdy_int/dx/dy
 
 #def cubic_int(x,y,yp_exact=None,method='FD'):
 #    
@@ -236,6 +294,11 @@ N1=61
 x_sol, y_sol, phi_sol, ex_sol, ey_sol = poisson_sol(N1,yoff=yoff)
 h = x_sol[1,0]-x_sol[0,0]
 
+x_sol_int, y_sol_int, phi_sol_int, ex_sol_int, ey_sol_int, exy_sol_int = bicubic_int(x_sol, y_sol, phi_sol)
+ex_sol_int = -ex_sol_int
+ey_sol_int = -ey_sol_int
+h_sol_int = x_sol_int[1,0]-x_sol_int[0,0]
+
 rho_sol = charge_true(x_sol,y_sol)
 x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=3)
 ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=3)
@@ -261,7 +324,8 @@ cf21 = ax21.pcolormesh(X_true[1:,1:]-h_true/2., Y_true[1:,1:]-h_true/2., p_true[
 cbar21 = plt.colorbar(cf21)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar21.set_label('$\\phi$')
 ax22 = fig2.add_subplot(3,1,2)
-cf22 = ax22.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., phi_sol[1:,1:]-phi_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+#cf22 = ax22.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., phi_sol[1:,1:]-phi_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+cf22 = ax22.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., phi_sol[1:,1:], cmap=plt.cm.RdBu, lw=0, rasterized=True)
 #cf2.set_clim(0,-0.5)
 cbar22 = plt.colorbar(cf22)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar22.set_label('$\\phi$')
@@ -281,8 +345,9 @@ cbar31 = plt.colorbar(cf31)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar31.set_label('$E_x$')
 ax32 = fig3.add_subplot(3,1,2)
 #cf32 = ax32.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., ex_sol[1:,1:]-efieldx_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
-cf32 = ax32.pcolormesh(x_ref[1:,1:]-h_ref/2., y_ref[1:,1:]-h_ref/2., ex_ref[1:,1:]-efieldx_true(x_ref[1:,1:],y_ref[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
-#cf2.set_clim(0,-0.5)
+cf32 = ax32.pcolormesh(x_sol_int[1:,1:]-h_sol_int/2., y_sol_int[1:,1:]-h_sol_int/2., phi_sol_int[1:,1:], cmap=plt.cm.RdBu, lw=0, rasterized=True)
+#cf32 = ax32.pcolormesh(x_ref[1:,1:]-h_ref/2., y_ref[1:,1:]-h_ref/2., ex_ref[1:,1:]-efieldx_true(x_ref[1:,1:],y_ref[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+#cf32.set_clim(-5.e-3,5.e-3)
 cbar32 = plt.colorbar(cf32)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar32.set_label('$E_x$')
 ax33 = fig3.add_subplot(3,1,3)
@@ -290,6 +355,7 @@ ax33.plot(x_sol[:,N1//2], (ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N
 ax33.plot(x_ref[:,Nr//2], (ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2])),'r.')
 print(y_sol[0,N1//2], y_ref[0,Nr//2])
 ax33.set_xlim(-5,5)
+ax33.set_ylim(-5e-3,5e-3)
 ax33.set_xlabel('$x$')
 ax33.set_ylabel('$E_x$')
 
