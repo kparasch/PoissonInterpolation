@@ -189,10 +189,10 @@ def bicubic_int(X, Y, Z, k=0):
     dZdy_int = np.zeros_like(X_int)
     dZdxdy_int = np.zeros_like(X_int)
 
-    A1 = np.array([[1.,0,0,0],
-                   [0,0,1,0],
-                   [-3,3,-2,-1],
-                   [2,-2,1,1]])
+    A1 = np.array([[1.,0.,0.,0.],
+                   [0.,0.,1.,0.],
+                   [-3.,3.,-2.,-1.],
+                   [2.,-2.,1.,1.]])
 
     A2 = A1.transpose()
 
