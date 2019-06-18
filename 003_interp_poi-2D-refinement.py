@@ -179,7 +179,7 @@ def bicubic_int(X, Y, Z, k=0):
     dx = X[1,0] - X[0,0]
     dy = Y[0,1] - Y[0,0]
 
-    Nint=2001
+    Nint=1001
     x_int = np.linspace(xmin,xmax,Nint)
     y_int = np.linspace(ymin,ymax,Nint)
     X_int, Y_int = np.meshgrid(x_int,y_int,indexing='ij')
@@ -246,37 +246,37 @@ def bicubic_int(X, Y, Z, k=0):
 
     return X_int, Y_int, Z_int, dZdx_int, dZdy_int, dZdxdy_int
 
-#def cubic_int(x,y,yp_exact=None,method='FD'):
-#    
-#    xmin = x[0]
-#    xmax = x[len(x)-1]
-#    h = x[1]-x[0]
-#
-#    if method=='FD':
-#        yp=np.zeros_like(x)
-#        yp[1:-1] = (-y[:-2] + y[2:])/(2)
-#    elif method=='Exact':
-#        yp = yp_exact*h
-#
-#    x_int = np.linspace(xmin,xmax,2000)
-#    y_int = np.empty_like(x_int)
-#    yp_int = np.empty_like(x_int)
-#    for i,x in enumerate(x_int):
-#        if x <= xmin+h or x >= xmax - h:
-#            y_int[i] = 0
-#            yp_int[i] = 0
-#        else:
-#            ix0 = int((x-xmin)/h)
-#            ix1 = ix0+1
-#            xt = (x - xmin)/h - ix0
-#            a0 = y[ix0]
-#            a1 = yp[ix0]
-#            a2 = 3*(y[ix1]-y[ix0]) - (yp[ix1]+2*yp[ix0])
-#            a3 = (yp[ix1] + yp[ix0]) -2*( y[ix1] - y[ix0] )
-#            y_int[i] = a0 + a1*xt + a2*xt**2 + a3*xt**3
-#            yp_int[i] =  (a1 + 2*a2*xt + 3*a3*xt**2)/h
-#    
-#    return x_int, y_int, -yp_int
+def cubic_int(x,y,yp_exact=None,method='FD'):
+    
+    xmin = x[0]
+    xmax = x[len(x)-1]
+    h = x[1]-x[0]
+
+    if method=='FD':
+        yp=np.zeros_like(x)
+        yp[1:-1] = (-y[:-2] + y[2:])/(2)
+    elif method=='Exact':
+        yp = yp_exact*h
+
+    x_int = np.linspace(xmin,xmax,8000)
+    y_int = np.empty_like(x_int)
+    yp_int = np.empty_like(x_int)
+    for i,x in enumerate(x_int):
+        if x <= xmin+h or x >= xmax - h:
+            y_int[i] = 0
+            yp_int[i] = 0
+        else:
+            ix0 = int((x-xmin)/h)
+            ix1 = ix0+1
+            xt = (x - xmin)/h - ix0
+            a0 = y[ix0]
+            a1 = yp[ix0]
+            a2 = 3*(y[ix1]-y[ix0]) - (yp[ix1]+2*yp[ix0])
+            a3 = (yp[ix1] + yp[ix0]) -2*( y[ix1] - y[ix0] )
+            y_int[i] = a0 + a1*xt + a2*xt**2 + a3*xt**3
+            yp_int[i] =  (a1 + 2*a2*xt + 3*a3*xt**2)/h
+    
+    return x_int, y_int, -yp_int
 
 yoff=0
 Ntrue=1001
@@ -305,17 +305,24 @@ h_sol_int = x_sol_int[1,0]-x_sol_int[0,0]
 Nsi = x_sol_int.shape[0]
 
 rho_sol = charge_true(x_sol,y_sol)
-x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=3)
-ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=3)
+x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=1)#3)
+ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=1)
 ex_ref = -ex_ref
 ey_ref = -ey_ref
 h_ref = x_ref[1,0] - x_ref[0,0]
 Nr=x_ref.shape[0]
-x_ref_int, y_ref_int, phi_ref_int, ex_ref_int, ey_ref_int, exy_ref_int = bicubic_int(x_ref, y_ref, phi_ref, k=3)
-ex_ref_int = -ex_ref_int
-ey_ref_int = -ey_ref_int
-h_ref_int = x_ref_int[1,0] - x_ref_int[0,0]
-Nri=x_ref_int.shape[0]
+#x_ref_int, y_ref_int, phi_ref_int, ex_ref_int, ey_ref_int, exy_ref_int = bicubic_int(x_ref, y_ref, phi_ref, k=1)#3)
+#ex_ref_int = -ex_ref_int
+#ey_ref_int = -ey_ref_int
+#h_ref_int = x_ref_int[1,0] - x_ref_int[0,0]
+#Nri=x_ref_int.shape[0]
+
+
+xx1 = x_ref[:,Nr//2]
+phi1 = phi_ref[:,Nr//2]
+dx1 = -ex_ref[:,Nr//2]
+xx2, phi2, ex2 = cubic_int(xx1,phi1,dx1,method='Exact')
+
 #x_sol_fine, phi_sol_fine, e_sol_fine = poisson_sol_imp_glob(20,10)
 #x_sol_g, phi_sol_g, e_sol_g  = poisson_sol_imp_glob(20,2)
 
@@ -364,9 +371,10 @@ cbar32 = plt.colorbar(cf32)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar32.set_label('$E_x$')
 ax33 = fig3.add_subplot(3,1,3)
 ax33.plot(x_sol[:,N1//2], (ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N1//2])),'bo-')
+ax33.plot(xx2, ex2-efieldx_true(xx2,0.*xx2),'k-')
 ax33.plot(x_ref[:,Nr//2], (ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2])),'r.')
 ax33.plot(x_sol_int[:,Nsi//2], ex_sol_int[:,Nsi//2]-efieldx_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
-ax33.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2]-efieldx_true(x_ref_int[:,Nri//2],y_ref_int[:,Nri//2]),'k-')
+#ax33.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2]-efieldx_true(x_ref_int[:,Nri//2],y_ref_int[:,Nri//2]),'k-')
 print(y_sol[0,N1//2], y_ref[0,Nr//2])
 ax33.set_xlim(-5,5)
 ax33.set_ylim(-6e-3,6e-3)
@@ -386,6 +394,7 @@ ax42 = fig4.add_subplot(3,1,3)
 ax42.plot(X_true[:,Ntrue//2], ex_true[:,Ntrue//2],'g-')
 ax42.plot(x_sol[:,N1//2], ex_sol[:,N1//2],'b-')
 ax42.plot(x_ref[:,Nr//2], ex_ref[:,Nr//2],'r.')
+#ax42.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2],'k-')
 #ax3 = fig1.add_subplot(3,1,3)
 #ax1.plot(x_true, ch_true)
 #ax2.plot(x_true, e_true,'b',label='Exact Field')
