@@ -179,8 +179,9 @@ def bicubic_int(X, Y, Z, k=0):
     dx = X[1,0] - X[0,0]
     dy = Y[0,1] - Y[0,0]
 
-    x_int = np.linspace(xmin,xmax,2000)
-    y_int = np.linspace(ymin,ymax,2000)
+    Nint=2001
+    x_int = np.linspace(xmin,xmax,Nint)
+    y_int = np.linspace(ymin,ymax,Nint)
     X_int, Y_int = np.meshgrid(x_int,y_int,indexing='ij')
     
     Z_int = np.zeros_like(X_int)
@@ -188,14 +189,14 @@ def bicubic_int(X, Y, Z, k=0):
     dZdy_int = np.zeros_like(X_int)
     dZdxdy_int = np.zeros_like(X_int)
 
-    A1 = np.array([[1,0,0,0],
+    A1 = np.array([[1.,0,0,0],
                    [0,0,1,0],
                    [-3,3,-2,-1],
                    [2,-2,1,1]])
 
     A2 = A1.transpose()
 
-    F = np.empty_like(A1)
+    F = np.zeros_like(A1)
 
     for i in range(len(x_int)):
         for j in range(len(y_int)):
@@ -212,35 +213,38 @@ def bicubic_int(X, Y, Z, k=0):
                 F[1,0] = Z[ix1,iy0]
                 F[1,1] = Z[ix1,iy1]
 
-                F[2,0] = dZdx[ix0,iy0]
-                F[2,1] = dZdx[ix0,iy1]
-                F[3,0] = dZdx[ix1,iy0]
-                F[3,1] = dZdx[ix1,iy1]
+                F[2,0] = dZdx[ix0,iy0]*dx
+                F[2,1] = dZdx[ix0,iy1]*dx
+                F[3,0] = dZdx[ix1,iy0]*dx
+                F[3,1] = dZdx[ix1,iy1]*dx
 
-                F[0,2] = dZdy[ix0,iy0]
-                F[0,3] = dZdy[ix0,iy1]
-                F[1,2] = dZdy[ix1,iy0]
-                F[1,3] = dZdy[ix1,iy1]
+                F[0,2] = dZdy[ix0,iy0]*dy
+                F[0,3] = dZdy[ix0,iy1]*dy
+                F[1,2] = dZdy[ix1,iy0]*dy
+                F[1,3] = dZdy[ix1,iy1]*dy
 
-                F[2,2] = dZdxdy[ix0,iy0]
-                F[2,3] = dZdxdy[ix0,iy1]
-                F[3,2] = dZdxdy[ix1,iy0]
-                F[3,3] = dZdxdy[ix1,iy1]
+                F[2,2] = dZdxdy[ix0,iy0]*dx*dy
+                F[2,3] = dZdxdy[ix0,iy1]*dx*dy
+                F[3,2] = dZdxdy[ix1,iy0]*dx*dy
+                F[3,3] = dZdxdy[ix1,iy1]*dx*dy
 
                 a = np.matmul(A1, np.matmul(F, A2))
                 xt = (x - xmin)/dx - ix0
                 yt = (y - ymin)/dy - iy0
+                #xt=1.
+                #yt=1.
                 xx1 = np.array([1, xt, xt**2, xt**3])
-                yy1 = np.array([1, yt, yt**2, yt**3])
+                yy1 = np.array([1, yt, yt**2, yt**3]).transpose()
                 xx2 = np.array([0, 1., 2*xt, 3*xt**2])
-                yy2 = np.array([0, 1., 2*yt, 3*yt**2])
+                yy2 = np.array([0, 1., 2*yt, 3*yt**2]).transpose()
                 
                 Z_int[i,j] = np.matmul(xx1,np.matmul(a,yy1))
-                dZdx_int[i,j] = np.matmul(xx2,np.matmul(a,yy1))
-                dZdy_int[i,j] = np.matmul(xx1,np.matmul(a,yy2))
-                dZdxdy_int[i,j] = np.matmul(xx2,np.matmul(a,yy2))
+                #print(Z_int[i,j])
+                dZdx_int[i,j] = np.matmul(xx2,np.matmul(a,yy1))/dx
+                dZdy_int[i,j] = np.matmul(xx1,np.matmul(a,yy2))/dy
+                dZdxdy_int[i,j] = np.matmul(xx2,np.matmul(a,yy2))/dx/dy
 
-    return X_int, Y_int, Z_int, dZdx_int/dx, dZdy_int/dy, dZdxdy_int/dx/dy
+    return X_int, Y_int, Z_int, dZdx_int, dZdy_int, dZdxdy_int
 
 #def cubic_int(x,y,yp_exact=None,method='FD'):
 #    
@@ -298,6 +302,7 @@ x_sol_int, y_sol_int, phi_sol_int, ex_sol_int, ey_sol_int, exy_sol_int = bicubic
 ex_sol_int = -ex_sol_int
 ey_sol_int = -ey_sol_int
 h_sol_int = x_sol_int[1,0]-x_sol_int[0,0]
+Nsi = x_sol_int.shape[0]
 
 rho_sol = charge_true(x_sol,y_sol)
 x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=3)
@@ -306,6 +311,11 @@ ex_ref = -ex_ref
 ey_ref = -ey_ref
 h_ref = x_ref[1,0] - x_ref[0,0]
 Nr=x_ref.shape[0]
+x_ref_int, y_ref_int, phi_ref_int, ex_ref_int, ey_ref_int, exy_ref_int = bicubic_int(x_ref, y_ref, phi_ref, k=3)
+ex_ref_int = -ex_ref_int
+ey_ref_int = -ey_ref_int
+h_ref_int = x_ref_int[1,0] - x_ref_int[0,0]
+Nri=x_ref_int.shape[0]
 #x_sol_fine, phi_sol_fine, e_sol_fine = poisson_sol_imp_glob(20,10)
 #x_sol_g, phi_sol_g, e_sol_g  = poisson_sol_imp_glob(20,2)
 
@@ -332,7 +342,9 @@ cbar22.set_label('$\\phi$')
 ax23 = fig2.add_subplot(3,1,3)
 ax23.plot(x_sol[:,N1//2], phi_sol[:,N1//2]-phi_true(x_sol[:,N1//2],y_sol[:,N1//2]),'bo-')
 ax23.plot(x_ref[:,Nr//2], phi_ref[:,Nr//2]-phi_true(x_ref[:,Nr//2],y_ref[:,Nr//2]),'r.')
+ax23.plot(x_sol_int[:,Nsi//2], phi_sol_int[:,Nsi//2]-phi_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
 ax23.set_xlim(-5,5)
+ax23.set_ylim(-1.5e-2,0)
 ax23.set_xlabel('$x$')
 ax23.set_ylabel('$\\phi$')
 
@@ -353,9 +365,11 @@ cbar32.set_label('$E_x$')
 ax33 = fig3.add_subplot(3,1,3)
 ax33.plot(x_sol[:,N1//2], (ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N1//2])),'bo-')
 ax33.plot(x_ref[:,Nr//2], (ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2])),'r.')
+ax33.plot(x_sol_int[:,Nsi//2], ex_sol_int[:,Nsi//2]-efieldx_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
+ax33.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2]-efieldx_true(x_ref_int[:,Nri//2],y_ref_int[:,Nri//2]),'k-')
 print(y_sol[0,N1//2], y_ref[0,Nr//2])
 ax33.set_xlim(-5,5)
-ax33.set_ylim(-5e-3,5e-3)
+ax33.set_ylim(-6e-3,6e-3)
 ax33.set_xlabel('$x$')
 ax33.set_ylabel('$E_x$')
 
