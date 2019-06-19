@@ -143,7 +143,7 @@ def refine_grid(x,y,phi,rho, k=1):
         new_rho[1::2,:] = (new_rho[:-1:2,:] + new_rho[2::2,:])/2.
         #new_rho = charge_true(new_x, new_y)
         new_phi[::2,::2] = phi
-        d=1.
+        d=1.00
         new_phi[1::2,1::2] = (  new_phi[2::2,2::2]
                               + new_phi[:-1:2,:-1:2]
                               + new_phi[2::2,:-1:2]
@@ -297,16 +297,21 @@ p_true = phi_true(X_true, Y_true)
 N1=61
 x_sol, y_sol, phi_sol, ex_sol, ey_sol = poisson_sol(N1,yoff=yoff)
 h = x_sol[1,0]-x_sol[0,0]
+Ns = x_sol.shape[0]
 
-x_sol_int, y_sol_int, phi_sol_int, ex_sol_int, ey_sol_int, exy_sol_int = bicubic_int(x_sol, y_sol, phi_sol)
-ex_sol_int = -ex_sol_int
-ey_sol_int = -ey_sol_int
-h_sol_int = x_sol_int[1,0]-x_sol_int[0,0]
-Nsi = x_sol_int.shape[0]
+xx1_sol = x_sol[:,Ns//2]
+phi1_sol = phi_sol[:,Ns//2]
+dx1_sol = -ex_sol[:,Ns//2]
+xx2_sol, phi2_sol, ex2_sol = cubic_int(xx1_sol,phi1_sol,dx1_sol,method='Exact')
+#x_sol_int, y_sol_int, phi_sol_int, ex_sol_int, ey_sol_int, exy_sol_int = bicubic_int(x_sol, y_sol, phi_sol)
+#ex_sol_int = -ex_sol_int
+#ey_sol_int = -ey_sol_int
+#h_sol_int = x_sol_int[1,0]-x_sol_int[0,0]
+#Nsi = x_sol_int.shape[0]
 
 rho_sol = charge_true(x_sol,y_sol)
-x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=1)#3)
-ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=1)
+x_ref, y_ref, phi_ref, rho_ref = refine_grid(x_sol, y_sol, phi_sol, rho_sol, k=2)#3)
+ex_ref, ey_ref = fd(x_ref, y_ref, phi_ref,k=0)
 ex_ref = -ex_ref
 ey_ref = -ey_ref
 h_ref = x_ref[1,0] - x_ref[0,0]
@@ -349,7 +354,9 @@ cbar22.set_label('$\\phi$')
 ax23 = fig2.add_subplot(3,1,3)
 ax23.plot(x_sol[:,N1//2], phi_sol[:,N1//2]-phi_true(x_sol[:,N1//2],y_sol[:,N1//2]),'bo-')
 ax23.plot(x_ref[:,Nr//2], phi_ref[:,Nr//2]-phi_true(x_ref[:,Nr//2],y_ref[:,Nr//2]),'r.')
-ax23.plot(x_sol_int[:,Nsi//2], phi_sol_int[:,Nsi//2]-phi_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
+ax23.plot(xx2, phi2-phi_true(xx2,0.*xx2),'m-')
+ax23.plot(xx2_sol, phi2_sol-phi_true(xx2_sol,0.*xx2_sol),'k-')
+#ax23.plot(x_sol_int[:,Nsi//2], phi_sol_int[:,Nsi//2]-phi_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
 ax23.set_xlim(-5,5)
 ax23.set_ylim(-1.5e-2,0)
 ax23.set_xlabel('$x$')
@@ -363,17 +370,18 @@ cf31 = ax31.pcolormesh(X_true[1:,1:]-h_true/2., Y_true[1:,1:]-h_true/2., ex_true
 cbar31 = plt.colorbar(cf31)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar31.set_label('$E_x$')
 ax32 = fig3.add_subplot(3,1,2)
-#cf32 = ax32.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., ex_sol[1:,1:]-efieldx_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
-cf32 = ax32.pcolormesh(x_sol_int[1:,1:]-h_sol_int/2., y_sol_int[1:,1:]-h_sol_int/2., phi_sol_int[1:,1:], cmap=plt.cm.RdBu, lw=0, rasterized=True)
+cf32 = ax32.pcolormesh(x_sol[1:,1:]-h/2., y_sol[1:,1:]-h/2., ex_sol[1:,1:]-efieldx_true(x_sol[1:,1:],y_sol[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
+#cf32 = ax32.pcolormesh(x_sol_int[1:,1:]-h_sol_int/2., y_sol_int[1:,1:]-h_sol_int/2., phi_sol_int[1:,1:], cmap=plt.cm.RdBu, lw=0, rasterized=True)
 #cf32 = ax32.pcolormesh(x_ref[1:,1:]-h_ref/2., y_ref[1:,1:]-h_ref/2., ex_ref[1:,1:]-efieldx_true(x_ref[1:,1:],y_ref[1:,1:]), cmap=plt.cm.RdBu, lw=0, rasterized=True)
 #cf32.set_clim(-5.e-3,5.e-3)
 cbar32 = plt.colorbar(cf32)#, ticks=[-0.5,-0.4,-0.3,-0.2,-0.1,0.])
 cbar32.set_label('$E_x$')
 ax33 = fig3.add_subplot(3,1,3)
 ax33.plot(x_sol[:,N1//2], (ex_sol[:,N1//2]-efieldx_true(x_sol[:,N1//2],y_sol[:,N1//2])),'bo-')
-ax33.plot(xx2, ex2-efieldx_true(xx2,0.*xx2),'k-')
 ax33.plot(x_ref[:,Nr//2], (ex_ref[:,Nr//2]-efieldx_true(x_ref[:,Nr//2],y_ref[:,Nr//2])),'r.')
-ax33.plot(x_sol_int[:,Nsi//2], ex_sol_int[:,Nsi//2]-efieldx_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
+ax33.plot(xx2, ex2-efieldx_true(xx2,0.*xx2),'m-')
+ax33.plot(xx2_sol, ex2_sol-efieldx_true(xx2_sol,0.*xx2_sol),'k-')
+#ax33.plot(x_sol_int[:,Nsi//2], ex_sol_int[:,Nsi//2]-efieldx_true(x_sol_int[:,Nsi//2],y_sol_int[:,Nsi//2]),'k-')
 #ax33.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2]-efieldx_true(x_ref_int[:,Nri//2],y_ref_int[:,Nri//2]),'k-')
 print(y_sol[0,N1//2], y_ref[0,Nr//2])
 ax33.set_xlim(-5,5)
@@ -390,10 +398,14 @@ ax41 = fig4.add_subplot(3,1,2)
 ax41.plot(X_true[:,Ntrue//2], p_true[:,Ntrue//2],'g-')
 ax41.plot(x_sol[:,N1//2], phi_sol[:,N1//2],'b-')
 ax41.plot(x_ref[:,Nr//2], phi_ref[:,Nr//2],'r.')
+ax41.plot(xx2, phi2,'m-')
+ax41.plot(xx2_sol, phi2_sol,'k-')
 ax42 = fig4.add_subplot(3,1,3)
 ax42.plot(X_true[:,Ntrue//2], ex_true[:,Ntrue//2],'g-')
 ax42.plot(x_sol[:,N1//2], ex_sol[:,N1//2],'b-')
 ax42.plot(x_ref[:,Nr//2], ex_ref[:,Nr//2],'r.')
+ax42.plot(xx2, ex2,'m-')
+ax42.plot(xx2_sol, ex2_sol,'k-')
 #ax42.plot(x_ref_int[:,Nri//2], ex_ref_int[:,Nri//2],'k-')
 #ax3 = fig1.add_subplot(3,1,3)
 #ax1.plot(x_true, ch_true)
